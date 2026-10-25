@@ -21,9 +21,12 @@ if (fs.existsSync(dir)) {
   }
 }
 
-// Windows 启动器只认 sha256 顶层字段 + 固定文件名，保留向后兼容。
+// Windows 启动器只认顶层 sha256 字段，且必须是 **服务** 二进制的哈希。
+// 别按字母序取第一个 .exe：xiaohongshu-login-*.exe 会排在 xiaohongshu-mcp-* 前面。
 const winKey = Object.keys(files).find(n => n === 'xiaohongshu-mcp-checked.exe')
-  || Object.keys(files).find(n => /windows.*\.exe$/i.test(n));
+  || Object.keys(files).find(n => /^xiaohongshu-mcp[^/]*windows[^/]*\.exe$/i.test(n))
+  || Object.keys(files).find(n => /^xiaohongshu-mcp[^/]*\.exe$/i.test(n));
+if (!winKey) process.stderr.write('警告：未找到 Windows 服务二进制，checked-build.json 的 sha256 置空\n');
 
 process.stdout.write(`${JSON.stringify({
   upstream: 'v2.5.5',

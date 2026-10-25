@@ -124,17 +124,19 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
+      # 先落盘到临时目录，避免把几百 MB 二进制混进后面的源码包
       - uses: actions/download-artifact@v4
         with:
-          path: artifacts
+          path: ${{ runner.temp }}/artifacts
       - name: Collect binaries
         run: |
+          A="${{ runner.temp }}/artifacts"
           mkdir -p release-assets
-          cp artifacts/service-windows-amd64/xiaohongshu-mcp-windows-amd64.exe release-assets/
-          cp artifacts/service-linux-amd64/xiaohongshu-mcp-linux-amd64 release-assets/
-          cp artifacts/service-linux-arm64/xiaohongshu-mcp-linux-arm64 release-assets/
-          cp artifacts/service-darwin-arm64/xiaohongshu-mcp-darwin-arm64 release-assets/
-          cp artifacts/program-windows/*.exe release-assets/
+          cp "$A"/service-windows-amd64/xiaohongshu-mcp-windows-amd64.exe release-assets/
+          cp "$A"/service-linux-amd64/xiaohongshu-mcp-linux-amd64 release-assets/
+          cp "$A"/service-linux-arm64/xiaohongshu-mcp-linux-arm64 release-assets/
+          cp "$A"/service-darwin-arm64/xiaohongshu-mcp-darwin-arm64 release-assets/
+          cp "$A"/program-windows/xiaohongshu-login-windows-amd64.exe release-assets/
           chmod +x release-assets/xiaohongshu-mcp-linux-* release-assets/xiaohongshu-mcp-darwin-arm64
           ls -lh release-assets
       - name: Manifest (手机会话用它核对服务版本)
@@ -143,7 +145,7 @@ jobs:
         run: cd release-assets && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt
       - name: Zip source
         run: |
-          zip -qr dsh-xhs-whale-source.zip . -x '.git/*' 'data/*' 'release-assets/*'
+          zip -qr dsh-xhs-whale-source.zip . -x '.git/*' 'data/*' 'release-assets/*' 'artifacts/*'
           sha256sum dsh-xhs-whale-source.zip | tee dsh-xhs-whale-source.zip.sha256
       - uses: actions/upload-artifact@v4
         with:
