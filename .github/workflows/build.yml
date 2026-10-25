@@ -1,0 +1,192 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  GO_VERSION: '1.24'
+  NODE_VERSION: '22'
+
+jobs:
+  # ── 1. JS 层：离线检查（Linux + macOS + Windows）─────────────────────────
+  javascript:
+    name: JS ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Unit tests
+        run: node --test test/*.test.js
+      - name: Demo smoke check
+        run: node tools/smoke-demo.mjs
+      - name: Source package validation
+        run: node tools/package-release.mjs
+
+  # ── 2. 小红书服务：交叉编译（原项目只有 Windows 构建）───────────────────
+  service:
+    name: Service ${{ matrix.goos }}-${{ matrix.goarch }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: windows
+            goarch: amd64
+            ext: .exe
+            browser: windows-x64
+          - goos: linux
+            goarch: amd64
+            ext: ''
+            browser: linux-x64
+          - goos: linux
+            goarch: arm64
+            ext: ''
+            browser: none   # 上游只发布 linux-x64 浏览器，arm64 需自备 Chrome
+          - goos: darwin
+            goarch: arm64
+            ext: ''
+            browser: macos-arm64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: upstream/xiaohongshu-mcp/go.sum
+      - name: Test (host)
+        working-directory: upstream/xiaohongshu-mcp
+        run: go test . ./xiaohongshu -run '^Test' -count=1
+      - name: Build
+        working-directory: upstream/xiaohongshu-mcp
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: '0'
+        run: |
+          go build -trimpath -ldflags '-s -w -X main.version=v2.5.5-checked-local' \
+            -o "$GITHUB_WORKSPACE/out/xiaohongshu-mcp-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}" .
+      - name: Checksum
+        working-directory: out
+        run: |
+          f="xiaohongshu-mcp-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}"
+          if command -v sha256sum >/dev/null; then sha256sum "$f" > "$f.sha256"; else shasum -a 256 "$f" > "$f.sha256"; fi
+          cat "$f.sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: service-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: out/xiaohongshu-mcp-*
+          if-no-files-found: error
+
+  # ── 3. 启动器：与 service 保持同名变量，避免脚本里写死版本号 ───────────
+  program:
+    needs: [service]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: upstream/xiaohongshu-mcp/go.sum
+      - name: Build login tool
+        working-directory: upstream/xiaohongshu-mcp
+        env:
+          GOOS: windows
+          GOARCH: amd64
+          CGO_ENABLED: '0'
+        run: go build -trimpath -ldflags '-s -w' -o "$GITHUB_WORKSPACE/out/xiaohongshu-login-windows-amd64.exe" ./cmd/login
+      - name: Checksum
+        working-directory: out
+        run: sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: program-windows
+          path: out/*
+          if-no-files-found: error
+
+  # ── 4. 汇总：一个可直接下载使用的发布包 ────────────────────────────────
+  package:
+    needs: [javascript, service, program]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Collect binaries
+        run: |
+          mkdir -p release-assets
+          cp artifacts/service-windows-amd64/xiaohongshu-mcp-windows-amd64.exe release-assets/
+          cp artifacts/service-linux-amd64/xiaohongshu-mcp-linux-amd64 release-assets/
+          cp artifacts/service-linux-arm64/xiaohongshu-mcp-linux-arm64 release-assets/
+          cp artifacts/service-darwin-arm64/xiaohongshu-mcp-darwin-arm64 release-assets/
+          cp artifacts/program-windows/*.exe release-assets/
+          chmod +x release-assets/xiaohongshu-mcp-linux-* release-assets/xiaohongshu-mcp-darwin-arm64
+          ls -lh release-assets
+      - name: Manifest (手机会话用它核对服务版本)
+        run: node tools/build-manifest.mjs release-assets > release-assets/checked-build.json && cat release-assets/checked-build.json
+      - name: Checksums
+        run: cd release-assets && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt
+      - name: Zip source
+        run: |
+          zip -qr dsh-xhs-whale-source.zip . -x '.git/*' 'data/*' 'release-assets/*'
+          sha256sum dsh-xhs-whale-source.zip | tee dsh-xhs-whale-source.zip.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dsh-xhs-whale-package
+          path: |
+            release-assets/*
+            dsh-xhs-whale-source.zip*
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dsh-xhs-whale-package
+          path: |
+            dsh-xhs-whale-*.zip
+            dsh-xhs-whale-*.zip.sha256
+          if-no-files-found: error
+
+  # ── 5. 打 tag 时自动建 Release，附上所有二进制 ──────────────────────────
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [package]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Flatten
+        run: |
+          mkdir -p dist && cp artifacts/service-*/* dist/ && cp artifacts/program-windows/* dist/ && cp artifacts/dsh-xhs-whale-package/* dist/
+          cd dist && sha256sum * > SHA256SUMS.txt && ls -lh
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
+          body: |
+            自动构建产物，每个平台一个二进制 + 完整源码包。`SHA256SUMS.txt` 可逐一校验。
+
+            | 文件 | 用途 |
+            | --- | --- |
+            | `xiaohongshu-mcp-windows-amd64.exe` | 小红书服务（Windows x64） |
+            | `xiaohongshu-login-windows-amd64.exe` | 扫码登录 |
+            | `xiaohongshu-mcp-linux-amd64` | 服务（Linux x64） |
+            | `xiaohongshu-mcp-linux-arm64` | 服务（Linux arm64，需自备 Chrome） |
+            | `xiaohongshu-mcp-darwin-arm64` | 服务（macOS Apple Silicon） |
+            | `dsh-xhs-whale-*.zip` | 含前端 + 服务二进制的完整包 |

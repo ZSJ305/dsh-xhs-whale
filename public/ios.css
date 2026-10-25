@@ -1,0 +1,91 @@
+/* ── iSH / iOS 适配层（Minis 添加）──────────────────────────────────
+   仅覆盖外观与触控，不改任何业务逻辑。
+   1) iOS 安全区 + 刘海/底部手势条
+   2) 中文系统字体（-apple-system / PingFang），替换 Windows 字体栈
+   3) 触控目标 ≥ 44px、表单字号 ≥ 16px（避免聚焦时自动放大）
+   4) 横屏 iPad / 竖屏 iPad / 手机三档布局
+   5) 可"添加到主屏幕"的独立窗口表现
+*/
+:root {
+  --safe-t: env(safe-area-inset-top, 0px);
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-l: env(safe-area-inset-left, 0px);
+  --safe-r: env(safe-area-inset-right, 0px);
+  --serif: "Songti SC", "STSong", "Georgia", serif;
+  --sans: -apple-system, "SF Pro SC", "PingFang SC", "Helvetica Neue", "Hiragino Sans GB", sans-serif;
+}
+
+body {
+  font-family: var(--sans);
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+  touch-action: manipulation;
+}
+
+/* 工具栏：避开状态栏；独立窗口下额外留白 */
+.topbar { position: sticky; top: 0; z-index: 9; background: var(--bg); padding-top: var(--safe-t); height: calc(78px + var(--safe-t)); backdrop-filter: saturate(180%) blur(12px); }
+.sidebar { padding-top: calc(35px + var(--safe-t)); padding-left: calc(22px + var(--safe-l)); }
+@media (display-mode: standalone) {
+  .topbar { padding-top: calc(var(--safe-t) + 6px); }
+}
+
+/* 触控：按钮/导航/下拉不小于 44px 高，输入框 16px 防止 iOS 自动缩放 */
+.nav { min-height: 44px; }
+button, select, .primary, .secondary, .pill, .tag { min-height: 36px; }
+.primary, .secondary, .nav, .filter-row select { -webkit-user-select: none; user-select: none; }
+input:not([type=checkbox]), select, textarea, .search-line > input { font-size: 16px; }
+input[type=checkbox] { width: 22px !important; height: 22px; }
+.text-button { min-height: 32px; padding: 6px 8px; }
+
+/* 横向可滚动的图片/表格在 iOS 上更顺手 */
+.detail-images { -webkit-overflow-scrolling: touch; scroll-snap-type: x proximity; }
+.detail-images img { scroll-snap-align: center; }
+.original { -webkit-overflow-scrolling: touch; }
+
+/* 弹窗：iPhone 上贴合屏幕，iPad 上保持卡片感 */
+dialog { max-height: calc(100vh - var(--safe-t) - var(--safe-b) - 24px); }
+@supports (height: 100dvh) {
+  dialog { max-height: calc(100dvh - var(--safe-t) - var(--safe-b) - 24px); }
+}
+.dialog-top { padding-top: calc(14px + var(--safe-t)); }
+
+/* toast 避开状态栏与刘海 */
+#toast { top: calc(20px + var(--safe-t)); }
+
+/* ── 竖屏 iPad（761–1180px）：侧栏收窄，卡片两列 ───────────────── */
+@media (max-width: 1180px) and (min-width: 761px) {
+  .sidebar { width: 210px; padding: 26px 16px; }
+  .nav span { min-width: 16px; }
+  main { margin-left: 210px; padding: 0 26px 40px; }
+  .results { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .settings-grid { grid-template-columns: 1fr; gap: 14px; }
+  h1 { font-size: 30px; }
+  .heading-mark { display: none; }
+}
+
+/* ── 手机 / 竖屏窄窗（≤760px）：底部安全区留白，卡片单列 ───────── */
+@media (max-width: 760px) {
+  .sidebar { padding: calc(13px + var(--safe-t)) calc(17px + var(--safe-r)) 13px calc(17px + var(--safe-l)); }
+  nav { overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+  nav::-webkit-scrollbar { display: none; }
+  .nav { flex: 0 0 auto; padding: 9px 11px; }
+  main { padding: 0 calc(18px + var(--safe-r)) calc(25px + var(--safe-b)) calc(18px + var(--safe-l)); }
+  .results { grid-template-columns: 1fr; }
+  .card-cover { height: 168px; }
+  .save-bar { padding-bottom: calc(20px + var(--safe-b)); }
+  .banner a { display: block; margin-top: 6px; }
+  #qr-image { width: 100%; max-width: 260px; height: auto; aspect-ratio: 1; }
+}
+
+/* 横屏 iPhone 这类矮视口：压缩标题区，保证首屏能看到搜索框 */
+@media (max-height: 520px) and (orientation: landscape) {
+  .heading { padding: 12px 0 10px; }
+  h1 { font-size: 22px; }
+  .heading p, .eyebrow, .heading-mark, .steps { display: none; }
+}
+
+@media (prefers-color-scheme: dark) {
+  /* 原项目只有浅色主题：这里不做半吊子反色，只弱化刺眼白 */
+  :root { color-scheme: light; }
+}

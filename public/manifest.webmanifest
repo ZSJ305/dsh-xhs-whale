@@ -1,0 +1,15 @@
+{
+  "name": "小鲸鱼 · 小红书阅读助手",
+  "short_name": "小鲸鱼",
+  "description": "在本机运行的小红书图文阅读工作台：筛选、精读、回复草稿。",
+  "lang": "zh-CN",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f6f5f0",
+  "theme_color": "#f6f5f0",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
