@@ -152,13 +152,6 @@ jobs:
             release-assets/*
             dsh-xhs-whale-source.zip*
           if-no-files-found: error
-      - uses: actions/upload-artifact@v4
-        with:
-          name: dsh-xhs-whale-package
-          path: |
-            dsh-xhs-whale-*.zip
-            dsh-xhs-whale-*.zip.sha256
-          if-no-files-found: error
 
   # ── 5. 打 tag 时自动建 Release，附上所有二进制 ──────────────────────────
   release:
