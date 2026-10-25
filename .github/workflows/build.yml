@@ -168,7 +168,14 @@ jobs:
           path: artifacts
       - name: Flatten
         run: |
-          mkdir -p dist && cp artifacts/service-*/* dist/ && cp artifacts/program-windows/* dist/ && cp artifacts/dsh-xhs-whale-package/* dist/
+          mkdir -p dist
+          # service-* / program-windows 产物是平铺的；package 产物放在 release-assets/ 子目录里
+          cp artifacts/service-*/*.exe artifacts/service-*/xiaohongshu-mcp-* dist/ 2>/dev/null || true
+          cp artifacts/program-windows/*.exe dist/
+          cp artifacts/dsh-xhs-whale-package/release-assets/* dist/
+          cp artifacts/dsh-xhs-whale-package/*.zip dist/
+          # package 阶段已算过 SHA256SUMS，这里按最终文件名重算一遍，避免混入旧清单
+          rm -f dist/SHA256SUMS.txt
           cd dist && sha256sum * > SHA256SUMS.txt && ls -lh
       - uses: softprops/action-gh-release@v2
         with:
